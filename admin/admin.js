@@ -19,7 +19,7 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import { FIREBASE_CONFIG, RESORT_NAME } from "../config.js?v=20260625-2";
+import { FIREBASE_CONFIG, RESORT_NAME } from "../config.js?v=20260625-3";
 
 const SHIFT_META = {
   first: { label: "Первая смена", time: "10:00–17:00", startTime: "10:00", endTime: "17:00" },

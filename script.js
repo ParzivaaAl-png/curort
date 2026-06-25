@@ -9,7 +9,7 @@ import {
   serverTimestamp,
   where,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { FIREBASE_CONFIG, RESORT_NAME, WHATSAPP_PHONE } from "./config.js?v=20260625-2";
+import { FIREBASE_CONFIG, RESORT_NAME, WHATSAPP_PHONE } from "./config.js?v=20260625-3";
 
 const SHIFT_META = {
   first: {
