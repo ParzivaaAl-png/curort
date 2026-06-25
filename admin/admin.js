@@ -19,7 +19,7 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import { FIREBASE_CONFIG, RESORT_NAME } from "../config.js?v=20260625-4";
+import { FIREBASE_CONFIG, RESORT_NAME } from "../config.js?v=20260625-5";
 
 const SHIFT_META = {
   first: { label: "Первая смена", time: "10:00–17:00", startTime: "10:00", endTime: "17:00" },
@@ -40,6 +40,7 @@ const state = {
   slots: [],
   bookings: [],
   user: null,
+  rolloverTimer: null,
 };
 
 const els = {
@@ -67,6 +68,7 @@ document.querySelectorAll(".brand-text, .admin-title .eyebrow").forEach((node) =
 
 bindEvents();
 initAuth();
+scheduleDateRollover();
 
 function bindEvents() {
   els.loginForm.addEventListener("submit", handleLogin);
@@ -138,6 +140,7 @@ async function loadAdminData() {
     state.slots = slotsSnapshot.docs
       .map((document) => ({ id: document.id, ...document.data() }))
       .filter(isValidSlot)
+      .filter(isCurrentOrFutureSlot)
       .sort(sortSlots);
     state.bookings = bookingsSnapshot.docs.map((document) => ({
       id: document.id,
@@ -148,6 +151,20 @@ async function loadAdminData() {
     console.error(error);
     showToast("Нет доступа к данным. Проверьте коллекцию admins и Firestore Rules.");
   }
+}
+
+function scheduleDateRollover() {
+  window.clearTimeout(state.rolloverTimer);
+
+  const now = new Date();
+  const nextDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 3);
+
+  state.rolloverTimer = window.setTimeout(() => {
+    if (state.user) {
+      loadAdminData();
+    }
+    scheduleDateRollover();
+  }, nextDay.getTime() - now.getTime());
 }
 
 function render() {
@@ -552,6 +569,10 @@ function isSlotFree(status) {
 
 function isValidSlot(slot) {
   return Boolean(slot?.date && slot?.shift && SHIFT_META[slot.shift] && slot?.status);
+}
+
+function isCurrentOrFutureSlot(slot) {
+  return slot.date >= toIsoDate(new Date());
 }
 
 function showToast(text) {

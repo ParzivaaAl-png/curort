@@ -9,7 +9,7 @@ import {
   serverTimestamp,
   where,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { FIREBASE_CONFIG, RESORT_NAME, WHATSAPP_PHONE } from "./config.js?v=20260625-3";
+import { FIREBASE_CONFIG, RESORT_NAME, WHATSAPP_PHONE } from "./config.js?v=20260625-5";
 
 const SHIFT_META = {
   first: {
@@ -33,6 +33,7 @@ const state = {
   visibleMonth: startOfMonth(new Date()),
   loading: false,
   unsubscribeSlots: null,
+  rolloverTimer: null,
 };
 
 const isConfigured =
@@ -68,6 +69,7 @@ document.querySelectorAll(".brand-text, .eyebrow").forEach((node) => {
 initReveal();
 bindEvents();
 startSlotsListener();
+scheduleDateRollover();
 
 function bindEvents() {
   document.querySelector("[data-scroll-to-booking]").addEventListener("click", () => {
@@ -88,6 +90,11 @@ function bindEvents() {
 }
 
 function startSlotsListener() {
+  if (state.unsubscribeSlots) {
+    state.unsubscribeSlots();
+    state.unsubscribeSlots = null;
+  }
+
   if (!isConfigured) {
     els.setupNotice.hidden = false;
     state.slots = [];
@@ -107,6 +114,7 @@ function startSlotsListener() {
       state.slots = snapshot.docs
         .map((document) => ({ id: document.id, ...document.data() }))
         .filter(isValidSlot)
+        .filter(isCurrentOrFutureSlot)
         .sort(sortSlots);
 
       const selectedStillExists = state.slots.some(
@@ -130,6 +138,20 @@ function startSlotsListener() {
       render();
     },
   );
+}
+
+function scheduleDateRollover() {
+  window.clearTimeout(state.rolloverTimer);
+
+  const now = new Date();
+  const nextDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 3);
+
+  state.rolloverTimer = window.setTimeout(() => {
+    state.selectedDate = null;
+    state.selectedShift = null;
+    startSlotsListener();
+    scheduleDateRollover();
+  }, nextDay.getTime() - now.getTime());
 }
 
 function render() {
@@ -322,11 +344,14 @@ function buildWhatsAppMessage() {
 
 function getSelectedSlot() {
   if (!state.selectedDate || !state.selectedShift) return null;
-  return state.slots.find((slot) => slot.date === state.selectedDate && slot.shift === state.selectedShift);
+  return state.slots.find(
+    (slot) =>
+      slot.date === state.selectedDate && slot.shift === state.selectedShift && isCurrentOrFutureSlot(slot),
+  );
 }
 
 function slotsForDate(isoDate) {
-  return state.slots.filter((slot) => slot.date === isoDate);
+  return state.slots.filter((slot) => slot.date === isoDate && isCurrentOrFutureSlot(slot));
 }
 
 function isSlotFreeForPublic(status) {
@@ -335,6 +360,10 @@ function isSlotFreeForPublic(status) {
 
 function isValidSlot(slot) {
   return Boolean(slot?.date && slot?.shift && SHIFT_META[slot.shift] && slot?.status);
+}
+
+function isCurrentOrFutureSlot(slot) {
+  return slot.date >= toIsoDate(new Date());
 }
 
 function createSpacer() {
