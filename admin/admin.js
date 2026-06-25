@@ -19,7 +19,7 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import { FIREBASE_CONFIG, RESORT_NAME } from "../config.js?v=20260625-5";
+import { FIREBASE_CONFIG, RESORT_NAME } from "../config.js?v=20260625-6";
 
 const SHIFT_META = {
   first: { label: "Первая смена", time: "10:00–17:00", startTime: "10:00", endTime: "17:00" },
@@ -41,6 +41,8 @@ const state = {
   bookings: [],
   user: null,
   rolloverTimer: null,
+  slotsCollapsed: true,
+  slotDateFilter: "",
 };
 
 const els = {
@@ -55,6 +57,11 @@ const els = {
   addDateForm: document.querySelector("#addDateForm"),
   bulkYearButton: document.querySelector("#bulkYearButton"),
   slotDate: document.querySelector("#slotDate"),
+  toggleSlotsButton: document.querySelector("#toggleSlotsButton"),
+  slotsPanel: document.querySelector("#slotsPanel"),
+  slotDateFilter: document.querySelector("#slotDateFilter"),
+  clearSlotFilter: document.querySelector("#clearSlotFilter"),
+  slotFilterHint: document.querySelector("#slotFilterHint"),
   slotsList: document.querySelector("#slotsList"),
   bookingsList: document.querySelector("#bookingsList"),
   stats: document.querySelector("#stats"),
@@ -76,6 +83,9 @@ function bindEvents() {
   els.refreshButton.addEventListener("click", () => loadAdminData());
   els.addDateForm.addEventListener("submit", handleAddSlots);
   els.bulkYearButton.addEventListener("click", handleAddYearSlots);
+  els.toggleSlotsButton.addEventListener("click", toggleSlotsPanel);
+  els.slotDateFilter.addEventListener("input", handleSlotFilterInput);
+  els.clearSlotFilter.addEventListener("click", clearSlotFilter);
   els.slotDate.min = toIsoDate(new Date());
 }
 
@@ -197,18 +207,63 @@ function renderStats() {
 }
 
 function renderSlots() {
+  els.slotsPanel.hidden = state.slotsCollapsed;
+  els.toggleSlotsButton.textContent = state.slotsCollapsed ? "Показать" : "Скрыть";
+  els.toggleSlotsButton.setAttribute("aria-expanded", String(!state.slotsCollapsed));
+
+  if (state.slotsCollapsed) {
+    return;
+  }
+
+  const filterIsoDate = parseSlotDateFilter(state.slotDateFilter);
+  const hasFilter = Boolean(state.slotDateFilter.trim());
+  const filteredSlots = hasFilter && filterIsoDate
+    ? state.slots.filter((slot) => slot.date === filterIsoDate)
+    : state.slots;
+
+  if (hasFilter && !filterIsoDate) {
+    els.slotFilterHint.textContent = "Дата не распознана.";
+    els.slotsList.innerHTML = "";
+    return;
+  }
+
+  els.slotFilterHint.textContent = hasFilter
+    ? `Показано слотов: ${filteredSlots.length}.`
+    : `Показано слотов: ${state.slots.length}.`;
+
   if (!state.slots.length) {
     els.slotsList.innerHTML = `<div class="empty-admin">Пока нет доступных дат.</div>`;
     return;
   }
 
-  els.slotsList.innerHTML = state.slots.map(renderSlotRow).join("");
+  if (!filteredSlots.length) {
+    els.slotsList.innerHTML = `<div class="empty-admin">На эту дату слотов нет.</div>`;
+    return;
+  }
+
+  els.slotsList.innerHTML = filteredSlots.map(renderSlotRow).join("");
   els.slotsList.querySelectorAll("[data-release-slot]").forEach((button) => {
     button.addEventListener("click", () => releaseSlot(button.dataset.releaseSlot));
   });
   els.slotsList.querySelectorAll("[data-delete-slot]").forEach((button) => {
     button.addEventListener("click", () => deleteSlot(button.dataset.deleteSlot));
   });
+}
+
+function toggleSlotsPanel() {
+  state.slotsCollapsed = !state.slotsCollapsed;
+  renderSlots();
+}
+
+function handleSlotFilterInput() {
+  state.slotDateFilter = els.slotDateFilter.value.trim();
+  renderSlots();
+}
+
+function clearSlotFilter() {
+  state.slotDateFilter = "";
+  els.slotDateFilter.value = "";
+  renderSlots();
 }
 
 function renderSlotRow(slot) {
@@ -603,6 +658,22 @@ function toIsoDate(date) {
 function parseLocalDate(isoDate) {
   const [year, month, day] = isoDate.split("-").map(Number);
   return new Date(year, month - 1, day);
+}
+
+function parseSlotDateFilter(value) {
+  const match = value.trim().match(/^(\d{1,2})\.(\d{1,2})\.(\d{2}|\d{4})$/);
+  if (!match) return null;
+
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = match[3].length === 2 ? 2000 + Number(match[3]) : Number(match[3]);
+  const date = new Date(year, month - 1, day);
+
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    return null;
+  }
+
+  return toIsoDate(date);
 }
 
 function formatDateLong(isoDate) {

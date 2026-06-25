@@ -147,6 +147,33 @@
   gap: 12px;
 }
 
+.slots-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.slot-filter-row {
+  display: grid;
+  gap: 10px;
+}
+
+.date-filter-label {
+  display: grid;
+  gap: 7px;
+}
+
+.date-filter-label span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.date-filter-label input {
+  min-height: 44px;
+  border-radius: 14px;
+}
+
 .slot-row,
 .booking-row {
   display: grid;
@@ -214,5 +241,10 @@
   .note-line {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
+  }
+
+  .slot-filter-row {
+    grid-template-columns: minmax(180px, 1fr) auto;
+    align-items: end;
   }
 }

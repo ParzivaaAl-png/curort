@@ -5,13 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex" />
     <title>Lola Kurort — админ</title>
-    <link rel="stylesheet" href="../style.css?v=20260625-4" />
-    <link rel="stylesheet" href="admin.css?v=20260625-4" />
+    <link rel="icon" href="../assets/site-icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="../style.css?v=20260625-6" />
+    <link rel="stylesheet" href="admin.css?v=20260625-6" />
   </head>
   <body class="admin-body">
     <header class="site-header admin-header" aria-label="Админ-навигация">
       <a class="brand" href="../">
-        <span class="brand-mark" aria-hidden="true">LK</span>
+        <span class="brand-mark" aria-hidden="true">
+          <img src="../assets/site-icon.svg" alt="" />
+        </span>
         <span class="brand-text">Lola Kurort</span>
       </a>
       <button class="ghost-button" type="button" id="logoutButton" hidden>Выйти</button>
@@ -86,8 +89,34 @@
                 <p class="eyebrow">Слоты</p>
                 <h2>Все даты и смены</h2>
               </div>
+              <button
+                class="ghost-button"
+                type="button"
+                id="toggleSlotsButton"
+                aria-controls="slotsPanel"
+                aria-expanded="false"
+              >
+                Показать
+              </button>
             </div>
-            <div class="admin-list" id="slotsList"></div>
+            <div class="slots-panel" id="slotsPanel" hidden>
+              <div class="slot-filter-row">
+                <label class="date-filter-label">
+                  <span>Дата дд.мм.гг</span>
+                  <input
+                    id="slotDateFilter"
+                    type="text"
+                    inputmode="numeric"
+                    maxlength="10"
+                    autocomplete="off"
+                    placeholder="25.06.26"
+                  />
+                </label>
+                <button class="ghost-button" type="button" id="clearSlotFilter">Очистить</button>
+              </div>
+              <p class="admin-muted" id="slotFilterHint"></p>
+              <div class="admin-list" id="slotsList"></div>
+            </div>
           </div>
 
           <div class="admin-column">
@@ -104,6 +133,6 @@
     </main>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script type="module" src="admin.js?v=20260625-5"></script>
+    <script type="module" src="admin.js?v=20260625-6"></script>
   </body>
 </html>
