@@ -8,7 +8,10 @@ service cloud.firestore {
 
     function isAdmin() {
       return signedIn()
-        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+        && (
+          request.auth.token.email == 'hajrihanserzod580@gmail.com'
+          || exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        );
     }
 
     function validShift(shift) {
@@ -60,7 +63,7 @@ service cloud.firestore {
 
     match /admins/{userId} {
       allow read: if isAdmin();
-      allow write: if false;
+      allow write: if isAdmin();
     }
 
     match /slots/{slotId} {

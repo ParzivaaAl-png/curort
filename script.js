@@ -106,6 +106,7 @@ function startSlotsListener() {
     (snapshot) => {
       state.slots = snapshot.docs
         .map((document) => ({ id: document.id, ...document.data() }))
+        .filter(isValidSlot)
         .sort(sortSlots);
 
       const selectedStillExists = state.slots.some(
@@ -330,6 +331,10 @@ function slotsForDate(isoDate) {
 
 function isSlotFreeForPublic(status) {
   return status === "available" || status === "pending";
+}
+
+function isValidSlot(slot) {
+  return Boolean(slot?.date && slot?.shift && SHIFT_META[slot.shift] && slot?.status);
 }
 
 function createSpacer() {

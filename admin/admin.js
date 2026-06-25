@@ -135,6 +135,7 @@ async function loadAdminData() {
 
     state.slots = slotsSnapshot.docs
       .map((document) => ({ id: document.id, ...document.data() }))
+      .filter(isValidSlot)
       .sort(sortSlots);
     state.bookings = bookingsSnapshot.docs.map((document) => ({
       id: document.id,
@@ -478,6 +479,10 @@ function statusPill(status) {
 
 function isSlotFree(status) {
   return status === "available" || status === "pending";
+}
+
+function isValidSlot(slot) {
+  return Boolean(slot?.date && slot?.shift && SHIFT_META[slot.shift] && slot?.status);
 }
 
 function showToast(text) {
