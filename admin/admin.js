@@ -19,7 +19,7 @@ import {
   signInWithEmailAndPassword,
   signOut,
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import { FIREBASE_CONFIG, RESORT_NAME } from "../config.js?v=20260625-3";
+import { FIREBASE_CONFIG, RESORT_NAME } from "../config.js?v=20260625-4";
 
 const SHIFT_META = {
   first: { label: "Первая смена", time: "10:00–17:00", startTime: "10:00", endTime: "17:00" },
@@ -52,6 +52,7 @@ const els = {
   logoutButton: document.querySelector("#logoutButton"),
   refreshButton: document.querySelector("#refreshButton"),
   addDateForm: document.querySelector("#addDateForm"),
+  bulkYearButton: document.querySelector("#bulkYearButton"),
   slotDate: document.querySelector("#slotDate"),
   slotsList: document.querySelector("#slotsList"),
   bookingsList: document.querySelector("#bookingsList"),
@@ -72,6 +73,7 @@ function bindEvents() {
   els.logoutButton.addEventListener("click", handleLogout);
   els.refreshButton.addEventListener("click", () => loadAdminData());
   els.addDateForm.addEventListener("submit", handleAddSlots);
+  els.bulkYearButton.addEventListener("click", handleAddYearSlots);
   els.slotDate.min = toIsoDate(new Date());
 }
 
@@ -313,6 +315,73 @@ async function handleAddSlots(event) {
   } catch (error) {
     console.error(error);
     showToast("Не получилось добавить слоты.");
+  }
+}
+
+async function handleAddYearSlots() {
+  const button = els.bulkYearButton;
+  const originalText = button.textContent;
+
+  button.disabled = true;
+  button.textContent = "Добавляем...";
+
+  try {
+    const today = parseLocalDate(toIsoDate(new Date()));
+    const endOfYear = new Date(today.getFullYear(), 11, 31);
+    const slotsSnapshot = await getDocs(collection(db, "slots"));
+    const existingIds = new Set(slotsSnapshot.docs.map((document) => document.id));
+    const missingSlots = [];
+
+    for (let date = new Date(today); date <= endOfYear; date.setDate(date.getDate() + 1)) {
+      const isoDate = toIsoDate(date);
+
+      Object.entries(SHIFT_META).forEach(([shift, meta]) => {
+        const id = `${isoDate}_${shift}`;
+
+        if (!existingIds.has(id)) {
+          missingSlots.push({
+            id,
+            date: isoDate,
+            shift,
+            startTime: meta.startTime,
+            endTime: meta.endTime,
+          });
+        }
+      });
+    }
+
+    if (!missingSlots.length) {
+      showToast("Все даты до конца года уже добавлены.");
+      return;
+    }
+
+    for (let index = 0; index < missingSlots.length; index += 450) {
+      const batch = writeBatch(db);
+      const chunk = missingSlots.slice(index, index + 450);
+
+      chunk.forEach((slot) => {
+        batch.set(doc(db, "slots", slot.id), {
+          date: slot.date,
+          shift: slot.shift,
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+          status: "available",
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      });
+
+      await batch.commit();
+    }
+
+    showToast(`Добавлено слотов: ${missingSlots.length}.`);
+    await loadAdminData();
+  } catch (error) {
+    console.error(error);
+    showToast("Не получилось добавить даты до конца года.");
+  } finally {
+    button.disabled = false;
+    button.textContent = originalText;
   }
 }
 
