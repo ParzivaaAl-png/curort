@@ -1,5 +1,15 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { RESORT_NAME, SUPABASE_ANON_KEY, SUPABASE_URL, WHATSAPP_PHONE } from "./config.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import {
+  addDoc,
+  collection,
+  getFirestore,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  where,
+} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import { FIREBASE_CONFIG, RESORT_NAME, WHATSAPP_PHONE } from "./config.js";
 
 const SHIFT_META = {
   first: {
@@ -22,16 +32,17 @@ const state = {
   selectedShift: null,
   visibleMonth: startOfMonth(new Date()),
   loading: false,
+  unsubscribeSlots: null,
 };
 
 const isConfigured =
-  SUPABASE_URL.startsWith("https://") &&
-  SUPABASE_URL.includes(".supabase.co") &&
-  !SUPABASE_URL.includes("YOUR_PROJECT") &&
-  SUPABASE_ANON_KEY &&
-  !SUPABASE_ANON_KEY.includes("YOUR_SUPABASE_ANON_KEY");
+  Boolean(FIREBASE_CONFIG.apiKey) &&
+  Boolean(FIREBASE_CONFIG.projectId) &&
+  !FIREBASE_CONFIG.apiKey.includes("YOUR_FIREBASE") &&
+  !FIREBASE_CONFIG.projectId.includes("YOUR_PROJECT");
 
-const supabase = isConfigured ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+const app = isConfigured ? initializeApp(FIREBASE_CONFIG) : null;
+const db = app ? getFirestore(app) : null;
 
 const els = {
   calendarGrid: document.querySelector("#calendarGrid"),
@@ -56,7 +67,7 @@ document.querySelectorAll(".brand-text, .eyebrow").forEach((node) => {
 
 initReveal();
 bindEvents();
-await loadSlots();
+startSlotsListener();
 
 function bindEvents() {
   document.querySelector("[data-scroll-to-booking]").addEventListener("click", () => {
@@ -74,12 +85,9 @@ function bindEvents() {
   });
 
   els.whatsappButton.addEventListener("click", handleWhatsAppClick);
-  window.addEventListener("focus", () => {
-    if (isConfigured) loadSlots({ quiet: true });
-  });
 }
 
-async function loadSlots(options = {}) {
+function startSlotsListener() {
   if (!isConfigured) {
     els.setupNotice.hidden = false;
     state.slots = [];
@@ -87,33 +95,40 @@ async function loadSlots(options = {}) {
     return;
   }
 
-  try {
-    state.loading = true;
-    render();
+  state.loading = true;
+  render();
 
-    const todayIso = toIsoDate(new Date());
-    const { data, error } = await supabase
-      .from("slots")
-      .select("id,date,shift,start_time,end_time,status")
-      .gte("date", todayIso)
-      .order("date", { ascending: true })
-      .order("shift", { ascending: true });
+  const todayIso = toIsoDate(new Date());
+  const slotsQuery = query(collection(db, "slots"), where("date", ">=", todayIso), orderBy("date"));
 
-    if (error) throw error;
+  state.unsubscribeSlots = onSnapshot(
+    slotsQuery,
+    (snapshot) => {
+      state.slots = snapshot.docs
+        .map((document) => ({ id: document.id, ...document.data() }))
+        .sort(sortSlots);
 
-    state.slots = data ?? [];
-    const firstAvailable = state.slots.find((slot) => isSlotFreeForPublic(slot.status));
-    if (!state.selectedDate && firstAvailable) {
-      state.selectedDate = firstAvailable.date;
-      state.visibleMonth = startOfMonth(parseLocalDate(firstAvailable.date));
-    }
-  } catch (error) {
-    if (!options.quiet) showToast("Не получилось загрузить даты. Проверьте Supabase.");
-    console.error(error);
-  } finally {
-    state.loading = false;
-    render();
-  }
+      const selectedStillExists = state.slots.some(
+        (slot) => slot.date === state.selectedDate && isSlotFreeForPublic(slot.status),
+      );
+      const firstAvailable = state.slots.find((slot) => isSlotFreeForPublic(slot.status));
+
+      if (!selectedStillExists && firstAvailable) {
+        state.selectedDate = firstAvailable.date;
+        state.selectedShift = null;
+        state.visibleMonth = startOfMonth(parseLocalDate(firstAvailable.date));
+      }
+
+      state.loading = false;
+      render();
+    },
+    (error) => {
+      console.error(error);
+      state.loading = false;
+      showToast("Не получилось загрузить даты. Проверьте Firebase.");
+      render();
+    },
+  );
 }
 
 function render() {
@@ -262,7 +277,7 @@ async function handleWhatsAppClick() {
   if (!slot) return;
 
   if (!isConfigured) {
-    showToast("Сначала подключите Supabase в config.js.");
+    showToast("Сначала подключите Firebase в config.js.");
     return;
   }
 
@@ -273,18 +288,22 @@ async function handleWhatsAppClick() {
   els.whatsappButton.textContent = "Готовим заявку...";
 
   try {
-    const { error } = await supabase.rpc("create_pending_booking", {
-      target_slot_id: slot.id,
-      client_name: cleanInput(els.clientName.value),
-      client_phone: cleanInput(els.clientPhone.value),
+    await addDoc(collection(db, "bookings"), {
+      slotId: slot.id,
+      date: slot.date,
+      shift: slot.shift,
+      clientName: cleanInput(els.clientName.value),
+      clientPhone: cleanInput(els.clientPhone.value),
+      status: "pending",
+      adminNote: "",
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
     });
 
-    if (error) throw error;
     window.location.href = url;
   } catch (error) {
     console.error(error);
-    showToast("Слот мог измениться. Обновляем доступные даты.");
-    await loadSlots({ quiet: true });
+    showToast("Слот мог измениться. Проверьте Firebase и попробуйте ещё раз.");
   } finally {
     els.whatsappButton.disabled = false;
     els.whatsappButton.textContent = "Перейти в WhatsApp для оплаты";
@@ -354,6 +373,15 @@ function normalizePhone(phone) {
 
 function cleanInput(value) {
   return value.trim() || null;
+}
+
+function sortSlots(a, b) {
+  if (a.date !== b.date) return a.date.localeCompare(b.date);
+  return shiftOrder(a.shift) - shiftOrder(b.shift);
+}
+
+function shiftOrder(shift) {
+  return shift === "first" ? 1 : 2;
 }
 
 function startOfMonth(date) {

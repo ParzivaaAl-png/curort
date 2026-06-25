@@ -1,24 +1,45 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { RESORT_NAME, SUPABASE_ANON_KEY, SUPABASE_URL } from "../config.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  getFirestore,
+  orderBy,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  where,
+  writeBatch,
+} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import {
+  getAuth,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut,
+} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+import { FIREBASE_CONFIG, RESORT_NAME } from "../config.js";
 
 const SHIFT_META = {
-  first: { label: "Первая смена", time: "10:00–17:00", start_time: "10:00", end_time: "17:00" },
-  second: { label: "Вторая смена", time: "18:00–00:00", start_time: "18:00", end_time: "00:00" },
+  first: { label: "Первая смена", time: "10:00–17:00", startTime: "10:00", endTime: "17:00" },
+  second: { label: "Вторая смена", time: "18:00–00:00", startTime: "18:00", endTime: "00:00" },
 };
 
 const isConfigured =
-  SUPABASE_URL.startsWith("https://") &&
-  SUPABASE_URL.includes(".supabase.co") &&
-  !SUPABASE_URL.includes("YOUR_PROJECT") &&
-  SUPABASE_ANON_KEY &&
-  !SUPABASE_ANON_KEY.includes("YOUR_SUPABASE_ANON_KEY");
+  Boolean(FIREBASE_CONFIG.apiKey) &&
+  Boolean(FIREBASE_CONFIG.projectId) &&
+  !FIREBASE_CONFIG.apiKey.includes("YOUR_FIREBASE") &&
+  !FIREBASE_CONFIG.projectId.includes("YOUR_PROJECT");
 
-const supabase = isConfigured ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+const app = isConfigured ? initializeApp(FIREBASE_CONFIG) : null;
+const db = app ? getFirestore(app) : null;
+const auth = app ? getAuth(app) : null;
 
 const state = {
   slots: [],
   bookings: [],
-  session: null,
+  user: null,
 };
 
 const els = {
@@ -44,7 +65,7 @@ document.querySelectorAll(".brand-text, .admin-title .eyebrow").forEach((node) =
 });
 
 bindEvents();
-await initAuth();
+initAuth();
 
 function bindEvents() {
   els.loginForm.addEventListener("submit", handleLogin);
@@ -54,28 +75,29 @@ function bindEvents() {
   els.slotDate.min = toIsoDate(new Date());
 }
 
-async function initAuth() {
+function initAuth() {
   if (!isConfigured) {
-    els.loginHint.textContent = "Заполните SUPABASE_URL и SUPABASE_ANON_KEY в config.js.";
+    els.loginHint.textContent = "Заполните FIREBASE_CONFIG в config.js.";
     els.loginForm.querySelector("button").disabled = true;
     return;
   }
 
-  const { data } = await supabase.auth.getSession();
-  state.session = data.session;
-  updateAuthView();
-
-  if (state.session) await loadAdminData();
-
-  supabase.auth.onAuthStateChange(async (_event, session) => {
-    state.session = session;
+  onAuthStateChanged(auth, async (user) => {
+    state.user = user;
     updateAuthView();
-    if (session) await loadAdminData();
+
+    if (user) {
+      await loadAdminData();
+    } else {
+      state.slots = [];
+      state.bookings = [];
+      render();
+    }
   });
 }
 
 function updateAuthView() {
-  const isLoggedIn = Boolean(state.session);
+  const isLoggedIn = Boolean(state.user);
   els.loginPanel.hidden = isLoggedIn;
   els.adminApp.hidden = !isLoggedIn;
   els.logoutButton.hidden = !isLoggedIn;
@@ -89,12 +111,7 @@ async function handleLogin(event) {
   button.textContent = "Входим...";
 
   try {
-    const { error } = await supabase.auth.signInWithPassword({
-      email: els.email.value.trim(),
-      password: els.password.value,
-    });
-
-    if (error) throw error;
+    await signInWithEmailAndPassword(auth, els.email.value.trim(), els.password.value);
     showToast("Вход выполнен.");
   } catch (error) {
     console.error(error);
@@ -106,35 +123,27 @@ async function handleLogin(event) {
 }
 
 async function handleLogout() {
-  await supabase.auth.signOut();
-  state.slots = [];
-  state.bookings = [];
-  render();
+  await signOut(auth);
 }
 
 async function loadAdminData() {
   try {
-    const [slotsResult, bookingsResult] = await Promise.all([
-      supabase
-        .from("slots")
-        .select("id,date,shift,start_time,end_time,status,created_at,updated_at")
-        .order("date", { ascending: true })
-        .order("shift", { ascending: true }),
-      supabase
-        .from("bookings")
-        .select("id,slot_id,date,shift,client_name,client_phone,status,admin_note,created_at,updated_at")
-        .order("created_at", { ascending: false }),
+    const [slotsSnapshot, bookingsSnapshot] = await Promise.all([
+      getDocs(collection(db, "slots")),
+      getDocs(query(collection(db, "bookings"), orderBy("createdAt", "desc"))),
     ]);
 
-    if (slotsResult.error) throw slotsResult.error;
-    if (bookingsResult.error) throw bookingsResult.error;
-
-    state.slots = slotsResult.data ?? [];
-    state.bookings = bookingsResult.data ?? [];
+    state.slots = slotsSnapshot.docs
+      .map((document) => ({ id: document.id, ...document.data() }))
+      .sort(sortSlots);
+    state.bookings = bookingsSnapshot.docs.map((document) => ({
+      id: document.id,
+      ...document.data(),
+    }));
     render();
   } catch (error) {
     console.error(error);
-    showToast("Нет доступа к данным. Проверьте admin_users и RLS.");
+    showToast("Нет доступа к данным. Проверьте коллекцию admins и Firestore Rules.");
   }
 }
 
@@ -145,7 +154,7 @@ function render() {
 }
 
 function renderStats() {
-  const available = state.slots.filter((slot) => slot.status === "available").length;
+  const available = state.slots.filter((slot) => isSlotFree(slot.status)).length;
   const pending = state.bookings.filter((booking) => booking.status === "pending").length;
   const booked = state.slots.filter((slot) => slot.status === "booked").length;
   const dates = new Set(state.slots.map((slot) => slot.date)).size;
@@ -221,9 +230,9 @@ function renderBookings() {
 
 function renderBookingRow(booking) {
   const meta = SHIFT_META[booking.shift];
-  const name = escapeHtml(booking.client_name || "Имя не указано");
-  const phone = escapeHtml(booking.client_phone || "Телефон не указан");
-  const note = escapeHtml(booking.admin_note || "");
+  const name = escapeHtml(booking.clientName || "Имя не указано");
+  const phone = escapeHtml(booking.clientPhone || "Телефон не указан");
+  const note = escapeHtml(booking.adminNote || "");
   const canConfirm = booking.status === "pending";
   const canCancel = booking.status === "pending" || booking.status === "booked";
 
@@ -239,7 +248,7 @@ function renderBookingRow(booking) {
       <div class="row-title">
         <span>${name}</span>
         <span>${phone}</span>
-        <span>${formatDateTime(booking.created_at)}</span>
+        <span>${formatDateTime(booking.createdAt)}</span>
       </div>
       <div class="note-line">
         <input data-note-input="${booking.id}" type="text" value="${note}" placeholder="Заметка администратора" />
@@ -270,23 +279,35 @@ async function handleAddSlots(event) {
     return;
   }
 
-  const rows = shifts.map((shift) => ({
-    date,
-    shift,
-    start_time: SHIFT_META[shift].start_time,
-    end_time: SHIFT_META[shift].end_time,
-    status: "available",
-  }));
-
   try {
-    const { error } = await supabase.from("slots").upsert(rows, { onConflict: "date,shift" });
-    if (error) throw error;
+    let added = 0;
+
+    for (const shift of shifts) {
+      const id = `${date}_${shift}`;
+      const slotRef = doc(db, "slots", id);
+      const existingSlot = await getDoc(slotRef);
+
+      if (!existingSlot.exists()) {
+        const meta = SHIFT_META[shift];
+        await setDoc(slotRef, {
+          date,
+          shift,
+          startTime: meta.startTime,
+          endTime: meta.endTime,
+          status: "available",
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        added += 1;
+      }
+    }
+
     els.addDateForm.reset();
     els.addDateForm.querySelectorAll('input[name="shift"]').forEach((input) => {
       input.checked = true;
     });
     els.slotDate.min = toIsoDate(new Date());
-    showToast("Слоты добавлены.");
+    showToast(added ? "Слоты добавлены." : "Эти слоты уже существуют.");
     await loadAdminData();
   } catch (error) {
     console.error(error);
@@ -296,8 +317,45 @@ async function handleAddSlots(event) {
 
 async function confirmBooking(id) {
   try {
-    const { error } = await supabase.rpc("confirm_booking", { target_booking_id: id });
-    if (error) throw error;
+    const bookingRef = doc(db, "bookings", id);
+    const bookingSnapshot = await getDoc(bookingRef);
+
+    if (!bookingSnapshot.exists()) throw new Error("booking_not_found");
+
+    const booking = { id: bookingSnapshot.id, ...bookingSnapshot.data() };
+    const slotRef = doc(db, "slots", booking.slotId);
+    const slotSnapshot = await getDoc(slotRef);
+
+    if (!slotSnapshot.exists()) throw new Error("slot_not_found");
+    if (slotSnapshot.data().status === "booked" && booking.status !== "booked") {
+      throw new Error("slot_already_booked");
+    }
+
+    const pendingSnapshot = await getDocs(
+      query(collection(db, "bookings"), where("slotId", "==", booking.slotId)),
+    );
+    const batch = writeBatch(db);
+
+    pendingSnapshot.docs.forEach((document) => {
+      const item = document.data();
+      if (document.id !== id && item.status === "pending") {
+        batch.update(document.ref, {
+          status: "cancelled",
+          updatedAt: serverTimestamp(),
+        });
+      }
+    });
+
+    batch.update(bookingRef, {
+      status: "booked",
+      updatedAt: serverTimestamp(),
+    });
+    batch.update(slotRef, {
+      status: "booked",
+      updatedAt: serverTimestamp(),
+    });
+
+    await batch.commit();
     showToast("Бронь подтверждена.");
     await loadAdminData();
   } catch (error) {
@@ -310,8 +368,18 @@ async function cancelBooking(id) {
   if (!window.confirm("Отменить эту бронь?")) return;
 
   try {
-    const { error } = await supabase.rpc("cancel_booking", { target_booking_id: id });
-    if (error) throw error;
+    const bookingRef = doc(db, "bookings", id);
+    const bookingSnapshot = await getDoc(bookingRef);
+
+    if (!bookingSnapshot.exists()) throw new Error("booking_not_found");
+
+    const booking = { id: bookingSnapshot.id, ...bookingSnapshot.data() };
+    await updateDoc(bookingRef, {
+      status: "cancelled",
+      updatedAt: serverTimestamp(),
+    });
+    await syncSlotStatus(booking.slotId);
+
     showToast("Бронь отменена.");
     await loadAdminData();
   } catch (error) {
@@ -324,8 +392,24 @@ async function releaseSlot(id) {
   if (!window.confirm("Освободить слот и отменить активные заявки по нему?")) return;
 
   try {
-    const { error } = await supabase.rpc("release_slot", { target_slot_id: id });
-    if (error) throw error;
+    const bookingsSnapshot = await getDocs(query(collection(db, "bookings"), where("slotId", "==", id)));
+    const batch = writeBatch(db);
+
+    bookingsSnapshot.docs.forEach((document) => {
+      if (["pending", "booked"].includes(document.data().status)) {
+        batch.update(document.ref, {
+          status: "cancelled",
+          updatedAt: serverTimestamp(),
+        });
+      }
+    });
+
+    batch.update(doc(db, "slots", id), {
+      status: "available",
+      updatedAt: serverTimestamp(),
+    });
+
+    await batch.commit();
     showToast("Слот свободен.");
     await loadAdminData();
   } catch (error) {
@@ -338,8 +422,15 @@ async function deleteSlot(id) {
   if (!window.confirm("Удалить слот? Связанные заявки тоже будут удалены.")) return;
 
   try {
-    const { error } = await supabase.from("slots").delete().eq("id", id);
-    if (error) throw error;
+    const bookingsSnapshot = await getDocs(query(collection(db, "bookings"), where("slotId", "==", id)));
+    const batch = writeBatch(db);
+
+    bookingsSnapshot.docs.forEach((document) => {
+      batch.delete(document.ref);
+    });
+    batch.delete(doc(db, "slots", id));
+
+    await batch.commit();
     showToast("Слот удален.");
     await loadAdminData();
   } catch (error) {
@@ -351,17 +442,26 @@ async function deleteSlot(id) {
 async function saveNote(id) {
   const input = els.bookingsList.querySelector(`[data-note-input="${id}"]`);
   try {
-    const { error } = await supabase
-      .from("bookings")
-      .update({ admin_note: input.value.trim() || null })
-      .eq("id", id);
-    if (error) throw error;
+    await updateDoc(doc(db, "bookings", id), {
+      adminNote: input.value.trim(),
+      updatedAt: serverTimestamp(),
+    });
     showToast("Заметка сохранена.");
     await loadAdminData();
   } catch (error) {
     console.error(error);
     showToast("Не получилось сохранить заметку.");
   }
+}
+
+async function syncSlotStatus(slotId) {
+  const bookingsSnapshot = await getDocs(query(collection(db, "bookings"), where("slotId", "==", slotId)));
+  const hasBooked = bookingsSnapshot.docs.some((document) => document.data().status === "booked");
+
+  await updateDoc(doc(db, "slots", slotId), {
+    status: hasBooked ? "booked" : "available",
+    updatedAt: serverTimestamp(),
+  });
 }
 
 function statusPill(status) {
@@ -376,6 +476,10 @@ function statusPill(status) {
   return `<span class="status-pill ${className}">${labels[status] ?? status}</span>`;
 }
 
+function isSlotFree(status) {
+  return status === "available" || status === "pending";
+}
+
 function showToast(text) {
   els.toast.textContent = text;
   els.toast.classList.add("is-visible");
@@ -383,6 +487,15 @@ function showToast(text) {
   showToast.timer = window.setTimeout(() => {
     els.toast.classList.remove("is-visible");
   }, 3400);
+}
+
+function sortSlots(a, b) {
+  if (a.date !== b.date) return a.date.localeCompare(b.date);
+  return shiftOrder(a.shift) - shiftOrder(b.shift);
+}
+
+function shiftOrder(shift) {
+  return shift === "first" ? 1 : 2;
 }
 
 function toIsoDate(date) {
@@ -407,12 +520,15 @@ function formatDateLong(isoDate) {
 }
 
 function formatDateTime(value) {
+  const date = value?.toDate ? value.toDate() : value ? new Date(value) : null;
+  if (!date) return "Дата создаётся";
+
   return new Intl.DateTimeFormat("ru-RU", {
     day: "numeric",
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(value));
+  }).format(date);
 }
 
 function escapeHtml(value) {

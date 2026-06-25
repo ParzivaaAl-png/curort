@@ -1,0 +1,82 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function validShift(shift) {
+      return shift in ['first', 'second'];
+    }
+
+    function validStatus(status) {
+      return status in ['available', 'pending', 'booked', 'cancelled'];
+    }
+
+    function optionalText(value, limit) {
+      return value == null || (value is string && value.size() <= limit);
+    }
+
+    function validPublicBooking() {
+      return request.resource.data.keys().hasOnly([
+          'slotId',
+          'date',
+          'shift',
+          'clientName',
+          'clientPhone',
+          'status',
+          'adminNote',
+          'createdAt',
+          'updatedAt'
+        ])
+        && request.resource.data.keys().hasAll([
+          'slotId',
+          'date',
+          'shift',
+          'status',
+          'createdAt',
+          'updatedAt'
+        ])
+        && request.resource.data.slotId is string
+        && request.resource.data.date is string
+        && exists(/databases/$(database)/documents/slots/$(request.resource.data.slotId))
+        && get(/databases/$(database)/documents/slots/$(request.resource.data.slotId)).data.status in ['available', 'pending']
+        && request.resource.data.date == get(/databases/$(database)/documents/slots/$(request.resource.data.slotId)).data.date
+        && request.resource.data.shift == get(/databases/$(database)/documents/slots/$(request.resource.data.slotId)).data.shift
+        && validShift(request.resource.data.shift)
+        && request.resource.data.status == 'pending'
+        && optionalText(request.resource.data.clientName, 120)
+        && optionalText(request.resource.data.clientPhone, 60)
+        && optionalText(request.resource.data.adminNote, 500)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+    }
+
+    match /admins/{userId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /slots/{slotId} {
+      allow read: if true;
+      allow create, update: if isAdmin()
+        && validShift(request.resource.data.shift)
+        && validStatus(request.resource.data.status);
+      allow delete: if isAdmin();
+    }
+
+    match /bookings/{bookingId} {
+      allow read: if isAdmin();
+      allow create: if validPublicBooking();
+      allow update: if isAdmin()
+        && validStatus(request.resource.data.status);
+      allow delete: if isAdmin();
+    }
+  }
+}
