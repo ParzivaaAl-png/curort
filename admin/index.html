@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Lola Kurort — админ</title>
+    <link rel="stylesheet" href="../style.css" />
+    <link rel="stylesheet" href="admin.css" />
+  </head>
+  <body class="admin-body">
+    <header class="site-header admin-header" aria-label="Админ-навигация">
+      <a class="brand" href="../">
+        <span class="brand-mark" aria-hidden="true">LK</span>
+        <span class="brand-text">Lola Kurort</span>
+      </a>
+      <button class="ghost-button" type="button" id="logoutButton" hidden>Выйти</button>
+    </header>
+
+    <main class="admin-shell">
+      <section class="admin-login" id="loginPanel">
+        <div class="admin-card">
+          <p class="eyebrow">Админ</p>
+          <h1>Вход</h1>
+          <form class="admin-form" id="loginForm">
+            <label>
+              <span>Логин / email</span>
+              <input id="email" type="email" autocomplete="username" required />
+            </label>
+            <label>
+              <span>Пароль</span>
+              <input id="password" type="password" autocomplete="current-password" required />
+            </label>
+            <button class="primary-button wide" type="submit">Войти</button>
+          </form>
+          <p class="admin-muted" id="loginHint">
+            Доступ открывается только пользователям из таблицы admin_users.
+          </p>
+        </div>
+      </section>
+
+      <section class="admin-app" id="adminApp" hidden>
+        <div class="admin-title">
+          <div>
+            <p class="eyebrow">Lola Kurort</p>
+            <h1>Брони и даты</h1>
+          </div>
+          <button class="secondary-button" type="button" id="refreshButton">Обновить</button>
+        </div>
+
+        <div class="admin-stats" id="stats"></div>
+
+        <section class="admin-card">
+          <div class="admin-card-heading">
+            <div>
+              <p class="eyebrow">Даты</p>
+              <h2>Добавить слоты</h2>
+            </div>
+          </div>
+          <form class="add-date-form" id="addDateForm">
+            <label>
+              <span>Дата</span>
+              <input id="slotDate" type="date" required />
+            </label>
+            <label class="checkbox-line">
+              <input type="checkbox" name="shift" value="first" checked />
+              <span>10:00–17:00</span>
+            </label>
+            <label class="checkbox-line">
+              <input type="checkbox" name="shift" value="second" checked />
+              <span>18:00–00:00</span>
+            </label>
+            <button class="primary-button" type="submit">Добавить</button>
+          </form>
+        </section>
+
+        <section class="admin-grid">
+          <div class="admin-column">
+            <div class="admin-card-heading">
+              <div>
+                <p class="eyebrow">Слоты</p>
+                <h2>Все даты и смены</h2>
+              </div>
+            </div>
+            <div class="admin-list" id="slotsList"></div>
+          </div>
+
+          <div class="admin-column">
+            <div class="admin-card-heading">
+              <div>
+                <p class="eyebrow">Заявки</p>
+                <h2>Переходы в WhatsApp</h2>
+              </div>
+            </div>
+            <div class="admin-list" id="bookingsList"></div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="admin.js"></script>
+  </body>
+</html>

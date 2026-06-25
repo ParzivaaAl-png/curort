@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Мобильное бронирование времени посещения курорта Lola Kurort."
+    />
+    <title>Lola Kurort — бронирование</title>
+    <link rel="preload" href="assets/resort-hero.png" as="image" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="site-header" aria-label="Навигация">
+      <a class="brand" href="#top" aria-label="Lola Kurort">
+        <span class="brand-mark" aria-hidden="true">LK</span>
+        <span class="brand-text">Lola Kurort</span>
+      </a>
+      <a class="header-link" href="admin/">Админ</a>
+    </header>
+
+    <main id="top">
+      <section class="hero section-pad reveal">
+        <div class="hero-copy">
+          <p class="eyebrow">Lola Kurort</p>
+          <h1>Время для тихого отдыха уже ждет</h1>
+          <p class="hero-text">Выберите удобную дату и время для посещения.</p>
+          <button class="primary-button" type="button" data-scroll-to-booking>
+            Забронировать время
+          </button>
+        </div>
+        <figure class="hero-media" aria-label="Курортный бассейн утром">
+          <img src="assets/resort-hero.png" alt="" />
+          <figcaption>
+            <span>2 смены в день</span>
+            <strong>10:00–17:00 · 18:00–00:00</strong>
+          </figcaption>
+        </figure>
+      </section>
+
+      <section class="booking-shell section-pad" id="booking" aria-label="Бронирование">
+        <div class="section-heading reveal">
+          <p class="eyebrow">Бронирование</p>
+          <h2>Выберите дату</h2>
+        </div>
+
+        <div class="notice reveal" id="setupNotice" hidden>
+          <strong>Нужно подключить Supabase.</strong>
+          <span>Заполните SUPABASE_URL и SUPABASE_ANON_KEY в config.js.</span>
+        </div>
+
+        <div class="calendar-panel reveal">
+          <div class="calendar-topline">
+            <button class="icon-button" type="button" id="prevMonth" aria-label="Предыдущий месяц">
+              ‹
+            </button>
+            <h3 id="calendarMonth">Месяц</h3>
+            <button class="icon-button" type="button" id="nextMonth" aria-label="Следующий месяц">
+              ›
+            </button>
+          </div>
+          <div class="weekdays" aria-hidden="true">
+            <span>Пн</span>
+            <span>Вт</span>
+            <span>Ср</span>
+            <span>Чт</span>
+            <span>Пт</span>
+            <span>Сб</span>
+            <span>Вс</span>
+          </div>
+          <div class="calendar-grid" id="calendarGrid" aria-live="polite"></div>
+        </div>
+
+        <section class="shift-section reveal" aria-label="Выбор смены">
+          <div class="section-heading compact">
+            <p class="eyebrow">Смена</p>
+            <h2>Выберите время</h2>
+          </div>
+          <div class="shift-grid" id="shiftGrid"></div>
+        </section>
+
+        <section class="summary-panel reveal" id="summaryPanel" hidden aria-label="Подтверждение">
+          <div>
+            <p class="eyebrow">Подтверждение</p>
+            <h2>Ваше посещение</h2>
+          </div>
+
+          <dl class="summary-list">
+            <div>
+              <dt>Дата</dt>
+              <dd id="summaryDate">—</dd>
+            </div>
+            <div>
+              <dt>Время</dt>
+              <dd id="summaryShift">—</dd>
+            </div>
+          </dl>
+
+          <div class="client-fields">
+            <label>
+              <span>Имя</span>
+              <input id="clientName" type="text" autocomplete="name" placeholder="Как к вам обращаться" />
+            </label>
+            <label>
+              <span>Телефон</span>
+              <input
+                id="clientPhone"
+                type="tel"
+                autocomplete="tel"
+                inputmode="tel"
+                placeholder="+7 700 000 00 00"
+              />
+            </label>
+          </div>
+
+          <button class="primary-button wide" type="button" id="whatsappButton">
+            Перейти в WhatsApp для оплаты
+          </button>
+        </section>
+      </section>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script type="module" src="script.js"></script>
+  </body>
+</html>
